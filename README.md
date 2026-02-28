@@ -98,6 +98,7 @@ Or if installed globally:
 
 - `list_tables` - List all tables in a base
 - `get_table_info` - Get table schema and column information
+- `list_columns` - List all columns for a table
 - `create_table` - Create a new table with custom schema
 - `delete_table` - Delete a table
 - `add_column` - Add a new column to an existing table
@@ -111,6 +112,8 @@ Or if installed globally:
 - `list_records` - List records with filtering and pagination
 - `update_record` - Update an existing record
 - `delete_record` - Delete a record
+- `bulk_update_records` - Update multiple records in a single request
+- `bulk_delete_records` - Delete multiple records by their IDs
 - `search_records` - Full-text search across records
 
 ### Query Operations
@@ -299,6 +302,35 @@ Note: The tool will search for columns matching either the `column_name` or `tit
     "sort": ["-Revenue", "Name"],
     "fields": ["Name", "Email", "Revenue"],
     "limit": 10
+  }
+}
+```
+
+### Bulk Update Records
+
+```json
+{
+  "tool": "bulk_update_records",
+  "arguments": {
+    "base_id": "p_abc123",
+    "table_name": "customers",
+    "records": [
+      { "Id": 1, "Status": "inactive" },
+      { "Id": 2, "Status": "inactive" }
+    ]
+  }
+}
+```
+
+### Bulk Delete Records
+
+```json
+{
+  "tool": "bulk_delete_records",
+  "arguments": {
+    "base_id": "p_abc123",
+    "table_name": "customers",
+    "record_ids": [10, 11, 12]
   }
 }
 ```
