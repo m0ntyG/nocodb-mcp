@@ -169,6 +169,38 @@ export const tableTools: Tool[] = [
     },
   },
   {
+    name: "list_columns",
+    description: "List all columns for a table",
+    inputSchema: {
+      type: "object",
+      properties: {
+        table_id: {
+          type: "string",
+          description: "The ID of the table",
+        },
+      },
+      required: ["table_id"],
+    },
+    handler: async (client: NocoDBClient, args: { table_id: string }) => {
+      const columns = await client.listColumns(args.table_id);
+      return {
+        columns: columns.map((col) => ({
+          id: col.id,
+          title: col.title,
+          column_name: col.column_name,
+          uidt: col.uidt,
+          dt: col.dt,
+          pk: col.pk,
+          pv: col.pv,
+          rqd: col.rqd,
+          unique: col.unique,
+          ai: col.ai,
+        })),
+        count: columns.length,
+      };
+    },
+  },
+  {
     name: "delete_table",
     description: "Delete a table from the database",
     inputSchema: {
