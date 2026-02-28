@@ -12,6 +12,8 @@ import {
   QueryOptions,
   AggregateOptions,
   BulkInsertOptions,
+  BulkUpdateOptions,
+  BulkDeleteOptions,
 } from "./types.js";
 
 export class NocoDBError extends Error {
@@ -25,9 +27,15 @@ export class NocoDBError extends Error {
   }
 }
 
+// Number of records to fetch per page when paginating through all records
+const PAGINATION_PAGE_SIZE = 1000;
+// Multiplier for over-fetching in search to allow client-side filtering
+const SEARCH_OVERFETCH_MULTIPLIER = 4;
+
 export class NocoDBClient {
   private client: AxiosInstance;
   private config: NocoDBConfig;
+  private tableCache: Map<string, NocoDBTable[]> = new Map();
 
   constructor(config: NocoDBConfig) {
     this.config = config;
@@ -73,7 +81,33 @@ export class NocoDBClient {
     const response = await this.client.get(
       `/api/v1/db/meta/projects/${baseId}/tables`,
     );
-    return response.data.list;
+    const tables = response.data.list;
+    // Update cache
+    this.tableCache.set(baseId, tables);
+    return tables;
+  }
+
+  // Helper: resolve table name to table object (uses cache)
+  private async resolveTable(baseId: string, tableName: string): Promise<NocoDBTable> {
+    let tables = this.tableCache.get(baseId);
+    if (!tables) {
+      tables = await this.listTables(baseId);
+    }
+    const table = tables.find(
+      (t) => t.table_name === tableName || t.title === tableName,
+    );
+    if (!table) {
+      // Refresh cache and retry once
+      tables = await this.listTables(baseId);
+      const retried = tables.find(
+        (t) => t.table_name === tableName || t.title === tableName,
+      );
+      if (!retried) {
+        throw new NocoDBError(`Table ${tableName} not found`);
+      }
+      return retried;
+    }
+    return table;
   }
 
   async getTable(tableId: string): Promise<NocoDBTable> {
@@ -99,6 +133,18 @@ export class NocoDBClient {
 
   async deleteTable(tableId: string): Promise<void> {
     await this.client.delete(`/api/v1/db/meta/tables/${tableId}`);
+    // Invalidate cache for all bases since we don't know which base this table belongs to
+    this.tableCache.clear();
+  }
+
+  async renameTable(tableId: string, title: string): Promise<NocoDBTable> {
+    const response = await this.client.patch(
+      `/api/v1/db/meta/tables/${tableId}`,
+      { title },
+    );
+    // Invalidate cache
+    this.tableCache.clear();
+    return response.data;
   }
 
   // Column operations
@@ -138,21 +184,24 @@ export class NocoDBClient {
     await this.client.delete(`/api/v2/meta/columns/${columnId}`);
   }
 
+  async updateColumn(
+    columnId: string,
+    columnDefinition: any,
+  ): Promise<NocoDBColumn> {
+    const response = await this.client.patch(
+      `/api/v2/meta/columns/${columnId}`,
+      columnDefinition,
+    );
+    return response.data;
+  }
+
   // Record operations
   async createRecord(
     baseId: string,
     tableName: string,
     data: NocoDBRecord,
   ): Promise<NocoDBRecord> {
-    // First get table ID from table name
-    const tables = await this.listTables(baseId);
-    const table = tables.find(
-      (t) => t.table_name === tableName || t.title === tableName,
-    );
-    if (!table) {
-      throw new NocoDBError(`Table ${tableName} not found`);
-    }
-
+    const table = await this.resolveTable(baseId, tableName);
     const response = await this.client.post(
       `/api/v2/tables/${table.id}/records`,
       data,
@@ -165,15 +214,7 @@ export class NocoDBClient {
     tableName: string,
     options: BulkInsertOptions,
   ): Promise<NocoDBRecord[]> {
-    // First get table ID from table name
-    const tables = await this.listTables(baseId);
-    const table = tables.find(
-      (t) => t.table_name === tableName || t.title === tableName,
-    );
-    if (!table) {
-      throw new NocoDBError(`Table ${tableName} not found`);
-    }
-
+    const table = await this.resolveTable(baseId, tableName);
     const response = await this.client.post(
       `/api/v2/tables/${table.id}/records`,
       options.records,
@@ -186,15 +227,7 @@ export class NocoDBClient {
     tableName: string,
     recordId: string,
   ): Promise<NocoDBRecord> {
-    // First get table ID from table name
-    const tables = await this.listTables(baseId);
-    const table = tables.find(
-      (t) => t.table_name === tableName || t.title === tableName,
-    );
-    if (!table) {
-      throw new NocoDBError(`Table ${tableName} not found`);
-    }
-
+    const table = await this.resolveTable(baseId, tableName);
     const response = await this.client.get(
       `/api/v2/tables/${table.id}/records/${recordId}`,
     );
@@ -206,14 +239,7 @@ export class NocoDBClient {
     tableName: string,
     options?: QueryOptions,
   ): Promise<{ list: NocoDBRecord[]; pageInfo: any }> {
-    // First get table ID from table name
-    const tables = await this.listTables(baseId);
-    const table = tables.find(
-      (t) => t.table_name === tableName || t.title === tableName,
-    );
-    if (!table) {
-      throw new NocoDBError(`Table ${tableName} not found`);
-    }
+    const table = await this.resolveTable(baseId, tableName);
 
     const params = new URLSearchParams();
 
@@ -246,14 +272,7 @@ export class NocoDBClient {
     recordId: string,
     data: NocoDBRecord,
   ): Promise<NocoDBRecord> {
-    // First get table ID from table name
-    const tables = await this.listTables(baseId);
-    const table = tables.find(
-      (t) => t.table_name === tableName || t.title === tableName,
-    );
-    if (!table) {
-      throw new NocoDBError(`Table ${tableName} not found`);
-    }
+    const table = await this.resolveTable(baseId, tableName);
 
     // Get the primary key field name (usually ID but can vary)
     const columns = await this.listColumns(table.id);
@@ -277,14 +296,7 @@ export class NocoDBClient {
     tableName: string,
     recordId: string,
   ): Promise<void> {
-    // First get table ID from table name
-    const tables = await this.listTables(baseId);
-    const table = tables.find(
-      (t) => t.table_name === tableName || t.title === tableName,
-    );
-    if (!table) {
-      throw new NocoDBError(`Table ${tableName} not found`);
-    }
+    const table = await this.resolveTable(baseId, tableName);
 
     // Get the primary key field name (usually ID but can vary)
     const columns = await this.listColumns(table.id);
@@ -296,6 +308,52 @@ export class NocoDBClient {
     await this.client.delete(`/api/v2/tables/${table.id}/records`, {
       data: { [pkField]: recordId },
     });
+  }
+
+  async bulkUpdate(
+    baseId: string,
+    tableName: string,
+    options: BulkUpdateOptions,
+  ): Promise<NocoDBRecord[]> {
+    const table = await this.resolveTable(baseId, tableName);
+    const response = await this.client.patch(
+      `/api/v2/tables/${table.id}/records`,
+      options.records,
+    );
+    return response.data;
+  }
+
+  async bulkDelete(
+    baseId: string,
+    tableName: string,
+    options: BulkDeleteOptions,
+  ): Promise<void> {
+    const table = await this.resolveTable(baseId, tableName);
+    // NocoDB bulk delete expects array of objects with the PK field
+    const columns = await this.listColumns(table.id);
+    const pkColumn =
+      columns.find((col) => col.pk) ||
+      columns.find((col) => col.title === "ID");
+    const pkField = pkColumn?.title || "ID";
+
+    const deletePayload = options.ids.map((id) => ({ [pkField]: id }));
+    await this.client.delete(`/api/v2/tables/${table.id}/records`, {
+      data: deletePayload,
+    });
+  }
+
+  async getRecordCount(
+    baseId: string,
+    tableName: string,
+    where?: string,
+  ): Promise<number> {
+    const table = await this.resolveTable(baseId, tableName);
+    const params = new URLSearchParams();
+    if (where) params.append("where", where);
+    const response = await this.client.get(
+      `/api/v2/tables/${table.id}/records/count?${params.toString()}`,
+    );
+    return response.data.count ?? response.data;
   }
 
   // View operations
@@ -321,6 +379,10 @@ export class NocoDBClient {
     return response.data;
   }
 
+  async deleteView(viewId: string): Promise<void> {
+    await this.client.delete(`/api/v2/meta/views/${viewId}`);
+  }
+
   // Search operation
   async searchRecords(
     baseId: string,
@@ -328,15 +390,23 @@ export class NocoDBClient {
     query: string,
     options?: QueryOptions,
   ): Promise<{ list: NocoDBRecord[]; pageInfo: any }> {
-    // For now, use regular list with client-side filtering
-    // since NocoDB search syntax is complex
-    const records = await this.listRecords(baseId, tableName, options);
+    // Use regular list with client-side filtering
+    // Fetch a reasonable batch to search through
+    const fetchOptions = {
+      ...options,
+      limit: options?.limit ? options.limit * SEARCH_OVERFETCH_MULTIPLIER : 100,
+    };
+    const records = await this.listRecords(baseId, tableName, fetchOptions);
     const filtered = records.list.filter((record) => {
       return Object.values(record).some((value) =>
         String(value).toLowerCase().includes(query.toLowerCase()),
       );
     });
-    return { list: filtered, pageInfo: records.pageInfo };
+    // Apply limit to filtered results
+    const limited = options?.limit
+      ? filtered.slice(options.offset || 0, (options.offset || 0) + options.limit)
+      : filtered;
+    return { list: limited, pageInfo: records.pageInfo };
   }
 
   // Aggregate operations
@@ -345,17 +415,30 @@ export class NocoDBClient {
     tableName: string,
     options: AggregateOptions,
   ): Promise<number> {
-    // For now, implement client-side aggregation
-    // as the aggregate endpoint might not be available in all versions
-    const records = await this.listRecords(baseId, tableName, {
-      where: options.where,
-    });
+    // Client-side aggregation - fetch all records matching the filter
+    const limit = PAGINATION_PAGE_SIZE;
+    let offset = 0;
+    let allRecords: NocoDBRecord[] = [];
+    let hasMore = true;
 
-    const values = records.list.map((r) => Number(r[options.column_name]) || 0);
+    while (hasMore) {
+      const page = await this.listRecords(baseId, tableName, {
+        where: options.where,
+        limit,
+        offset,
+      });
+      allRecords = allRecords.concat(page.list);
+      hasMore = page.list.length === limit;
+      offset += limit;
+    }
+
+    if (options.func === "count") {
+      return allRecords.length;
+    }
+
+    const values = allRecords.map((r) => Number(r[options.column_name]) || 0);
 
     switch (options.func) {
-      case "count":
-        return records.list.length;
       case "sum":
         return values.reduce((a, b) => a + b, 0);
       case "avg":
@@ -363,9 +446,9 @@ export class NocoDBClient {
           ? values.reduce((a, b) => a + b, 0) / values.length
           : 0;
       case "min":
-        return Math.min(...values);
+        return values.length > 0 ? Math.min(...values) : 0;
       case "max":
-        return Math.max(...values);
+        return values.length > 0 ? Math.max(...values) : 0;
       default:
         throw new NocoDBError(`Unknown aggregate function: ${options.func}`);
     }
@@ -378,11 +461,25 @@ export class NocoDBClient {
     columnName: string,
     options?: QueryOptions,
   ): Promise<any[]> {
-    // Implement client-side grouping
-    const records = await this.listRecords(baseId, tableName, options);
+    // Client-side grouping - fetch all matching records
+    const limit = PAGINATION_PAGE_SIZE;
+    let offset = 0;
+    let allRecords: NocoDBRecord[] = [];
+    let hasMore = true;
+
+    while (hasMore) {
+      const page = await this.listRecords(baseId, tableName, {
+        where: options?.where,
+        limit,
+        offset,
+      });
+      allRecords = allRecords.concat(page.list);
+      hasMore = page.list.length === limit;
+      offset += limit;
+    }
 
     const groups = new Map<any, number>();
-    records.list.forEach((record) => {
+    allRecords.forEach((record) => {
       const value = record[columnName];
       groups.set(value, (groups.get(value) || 0) + 1);
     });

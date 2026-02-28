@@ -434,5 +434,164 @@ export const tableTools: Tool[] = [
       };
     },
   },
+  {
+    name: "rename_table",
+    description: "Rename an existing table",
+    inputSchema: {
+      type: "object",
+      properties: {
+        table_id: {
+          type: "string",
+          description: "The ID of the table to rename",
+        },
+        title: {
+          type: "string",
+          description: "New name/title for the table",
+        },
+      },
+      required: ["table_id", "title"],
+    },
+    handler: async (
+      client: NocoDBClient,
+      args: { table_id: string; title: string },
+    ) => {
+      const table = await client.renameTable(args.table_id, args.title);
+      return {
+        table: {
+          id: table.id,
+          title: table.title,
+          table_name: table.table_name,
+        },
+        message: `Table renamed to '${args.title}' successfully`,
+      };
+    },
+  },
+  {
+    name: "list_columns",
+    description: "List all columns/fields in a table",
+    inputSchema: {
+      type: "object",
+      properties: {
+        table_id: {
+          type: "string",
+          description: "The ID of the table",
+        },
+      },
+      required: ["table_id"],
+    },
+    handler: async (client: NocoDBClient, args: { table_id: string }) => {
+      const columns = await client.listColumns(args.table_id);
+      return {
+        columns: columns.map((col) => ({
+          id: col.id,
+          title: col.title,
+          column_name: col.column_name,
+          uidt: col.uidt,
+          dt: col.dt,
+          pk: col.pk,
+          pv: col.pv,
+          rqd: col.rqd,
+          unique: col.unique,
+          ai: col.ai,
+        })),
+        count: columns.length,
+      };
+    },
+  },
+  {
+    name: "update_column",
+    description: "Update the properties of an existing column",
+    inputSchema: {
+      type: "object",
+      properties: {
+        table_id: {
+          type: "string",
+          description: "The ID of the table containing the column",
+        },
+        column_id: {
+          type: "string",
+          description: "The ID of the column to update (provide either column_id or column_name)",
+        },
+        column_name: {
+          type: "string",
+          description: "The name of the column to update (provide either column_id or column_name)",
+        },
+        title: {
+          type: "string",
+          description: "New display name for the column",
+        },
+        rqd: {
+          type: "boolean",
+          description: "Is required field",
+        },
+        unique: {
+          type: "boolean",
+          description: "Has unique constraint",
+        },
+        cdf: {
+          type: "string",
+          description: "Default value for the column",
+        },
+        meta: {
+          type: "object",
+          description: "Additional metadata (e.g., options for SingleSelect/MultiSelect)",
+        },
+      },
+      required: ["table_id"],
+    },
+    handler: async (
+      client: NocoDBClient,
+      args: {
+        table_id: string;
+        column_id?: string;
+        column_name?: string;
+        title?: string;
+        rqd?: boolean;
+        unique?: boolean;
+        cdf?: string;
+        meta?: any;
+      },
+    ) => {
+      if (!args.column_id && !args.column_name) {
+        throw new Error("Either column_id or column_name must be provided");
+      }
+
+      let columnId = args.column_id;
+      let existingColumn: any;
+
+      if (!columnId && args.column_name) {
+        const columns = await client.listColumns(args.table_id);
+        existingColumn = columns.find(
+          (col) =>
+            col.column_name === args.column_name ||
+            col.title === args.column_name,
+        );
+        if (!existingColumn) {
+          throw new Error(`Column '${args.column_name}' not found in table`);
+        }
+        columnId = existingColumn.id;
+      }
+
+      const updateData: any = {};
+      if (args.title !== undefined) updateData.title = args.title;
+      if (args.rqd !== undefined) updateData.rqd = args.rqd;
+      if (args.unique !== undefined) updateData.unique = args.unique;
+      if (args.cdf !== undefined) updateData.cdf = args.cdf;
+      if (args.meta !== undefined) updateData.meta = args.meta;
+
+      const column = await client.updateColumn(columnId!, updateData);
+      return {
+        column: {
+          id: column.id,
+          title: column.title,
+          column_name: column.column_name,
+          uidt: column.uidt,
+          rqd: column.rqd,
+          unique: column.unique,
+        },
+        message: `Column updated successfully`,
+      };
+    },
+  },
 ];
 

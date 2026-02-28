@@ -78,6 +78,14 @@ export interface BulkInsertOptions {
   records: NocoDBRecord[];
 }
 
+export interface BulkUpdateOptions {
+  records: NocoDBRecord[]; // Each record must include the primary key field
+}
+
+export interface BulkDeleteOptions {
+  ids: (string | number)[]; // Array of record IDs to delete
+}
+
 export interface NocoDBAttachment {
   url: string;
   title: string;
