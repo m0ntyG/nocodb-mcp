@@ -347,4 +347,90 @@ export const recordTools: Tool[] = [
       };
     },
   },
+  {
+    name: "bulk_update_records",
+    description:
+      "Update multiple records at once. Each record object must include the primary key field (usually 'Id' or 'ID') and the fields to update.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        base_id: {
+          type: "string",
+          description: "The ID of the base/project",
+        },
+        table_name: {
+          type: "string",
+          description: "The name of the table",
+        },
+        records: {
+          type: "array",
+          description:
+            "Array of records to update. Each must include the primary key (e.g., Id) and the fields to update.",
+          items: {
+            type: "object",
+            additionalProperties: true,
+          },
+        },
+      },
+      required: ["base_id", "table_name", "records"],
+    },
+    handler: async (
+      client: NocoDBClient,
+      args: {
+        base_id: string;
+        table_name: string;
+        records: any[];
+      },
+    ) => {
+      const result = await client.bulkUpdate(args.base_id, args.table_name, {
+        records: args.records,
+      });
+      return {
+        records: result,
+        count: Array.isArray(result) ? result.length : args.records.length,
+        message: `${args.records.length} records updated successfully`,
+      };
+    },
+  },
+  {
+    name: "bulk_delete_records",
+    description: "Delete multiple records at once by their IDs",
+    inputSchema: {
+      type: "object",
+      properties: {
+        base_id: {
+          type: "string",
+          description: "The ID of the base/project",
+        },
+        table_name: {
+          type: "string",
+          description: "The name of the table",
+        },
+        ids: {
+          type: "array",
+          description: "Array of record IDs to delete",
+          items: {
+            oneOf: [{ type: "string" }, { type: "number" }],
+          },
+        },
+      },
+      required: ["base_id", "table_name", "ids"],
+    },
+    handler: async (
+      client: NocoDBClient,
+      args: {
+        base_id: string;
+        table_name: string;
+        ids: (string | number)[];
+      },
+    ) => {
+      await client.bulkDelete(args.base_id, args.table_name, {
+        ids: args.ids,
+      });
+      return {
+        message: `${args.ids.length} records deleted successfully`,
+        deleted_ids: args.ids,
+      };
+    },
+  },
 ];

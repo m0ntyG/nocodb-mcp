@@ -204,4 +204,45 @@ export const queryTools: Tool[] = [
       };
     },
   },
+  {
+    name: "get_record_count",
+    description: "Get the total number of records in a table, with optional filter",
+    inputSchema: {
+      type: "object",
+      properties: {
+        base_id: {
+          type: "string",
+          description: "The ID of the base/project",
+        },
+        table_name: {
+          type: "string",
+          description: "The name of the table",
+        },
+        where: {
+          type: "string",
+          description: 'Optional filter condition (e.g., "(status,eq,active)")',
+        },
+      },
+      required: ["base_id", "table_name"],
+    },
+    handler: async (
+      client: NocoDBClient,
+      args: {
+        base_id: string;
+        table_name: string;
+        where?: string;
+      },
+    ) => {
+      const count = await client.getRecordCount(
+        args.base_id,
+        args.table_name,
+        args.where,
+      );
+      return {
+        count,
+        table_name: args.table_name,
+        where: args.where,
+      };
+    },
+  },
 ];

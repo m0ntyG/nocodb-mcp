@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-02-28
+
+### Added
+- **Table caching**: Table ID lookups are now cached per base, avoiding redundant API calls when performing multiple operations on the same table. The cache is automatically invalidated when tables are deleted or renamed.
+- **`rename_table` tool**: Rename an existing table by its ID.
+- **`list_columns` tool**: Standalone tool to list all columns/fields in a table (previously only available via `get_table_info`).
+- **`update_column` tool**: Update properties of an existing column (title, required, unique, default value, metadata, etc.).
+- **`bulk_update_records` tool**: Update multiple records in a single API call. Each record must include the primary key field.
+- **`bulk_delete_records` tool**: Delete multiple records at once by providing an array of IDs.
+- **`get_record_count` tool**: Get the total count of records in a table with optional filter support.
+- **`delete_view` tool**: Delete an existing view from a table.
+- **`updateColumn` API method** in `NocoDBClient`.
+- **`renameTable` API method** in `NocoDBClient`.
+- **`bulkUpdate` API method** in `NocoDBClient`.
+- **`bulkDelete` API method** in `NocoDBClient`.
+- **`getRecordCount` API method** in `NocoDBClient`.
+- **`deleteView` API method** in `NocoDBClient`.
+- **`BulkUpdateOptions` and `BulkDeleteOptions`** interfaces in `types.ts`.
+
+### Changed
+- **`deleteTable`** now clears the table cache.
+- **`searchRecords`** now fetches a bounded set of records (up to 100 by default) instead of all records, improving performance.
+- **`aggregate` and `groupBy`** now paginate through all records (in batches of 1000) to support large datasets correctly.
+- **MCP server version** updated to `0.3.0`.
+
 ## [0.2.2] - 2025-07-07
 
 ### Fixed

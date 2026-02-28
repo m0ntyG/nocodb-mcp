@@ -133,4 +133,25 @@ export const viewTools: Tool[] = [
       };
     },
   },
+  {
+    name: "delete_view",
+    description: "Delete a view from a table",
+    inputSchema: {
+      type: "object",
+      properties: {
+        view_id: {
+          type: "string",
+          description: "The ID of the view to delete",
+        },
+      },
+      required: ["view_id"],
+    },
+    handler: async (client: NocoDBClient, args: { view_id: string }) => {
+      await client.deleteView(args.view_id);
+      return {
+        message: "View deleted successfully",
+        view_id: args.view_id,
+      };
+    },
+  },
 ];

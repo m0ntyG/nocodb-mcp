@@ -42,7 +42,7 @@ const nocodb = new NocoDBClient(config);
 const server = new Server(
   {
     name: "nocodb-mcp",
-    version: "0.1.0",
+    version: "0.3.0",
   },
   {
     capabilities: {
